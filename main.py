@@ -1,14 +1,17 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from abc import ABC, abstractmethod
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
-from typing import Tuple, List
+from typing import List
 
 app = FastAPI()
 
 engine = create_engine('sqlite:///chess_game.db', echo=True)
 Base = declarative_base()
+
 
 class Move(Base):
     __tablename__ = 'moves'
@@ -19,6 +22,7 @@ class Move(Base):
     end = Column(String)
     game_id = Column(Integer, ForeignKey('games.id'))
 
+
 class Game(Base):
     __tablename__ = 'games'
 
@@ -26,10 +30,12 @@ class Game(Base):
     current_player = Column(String)
     moves = relationship('Move', backref='game')
 
+
 Base.metadata.create_all(engine)
 
 Session = sessionmaker(bind=engine)
 session = Session()
+
 
 class MoveRequest(BaseModel):
     player: str
@@ -37,26 +43,26 @@ class MoveRequest(BaseModel):
     end: List[int]
     game_id: int
 
+
 class GameResponse(BaseModel):
     id: int
     current_player: str
 
-class Piece:
-    def __init__(self, color):
-        self.color = color
 
-    def valid_move(self, start, end, board):
-        raise NotImplementedError("Subclass must implement abstract method")
+class Piece(ABC):
+    @staticmethod
+    @abstractmethod
+    def valid_move(start, end, board):
+        pass
 
+    @abstractmethod
     def serialize(self):
-        return str(self)
-
-    def __str__(self):
-        raise NotImplementedError("Subclass must implement abstract method")
+        pass
 
 
 class King(Piece):
-    def valid_move(self, start, end, board):
+    @staticmethod
+    def valid_move(start, end, board):
         if not (0 <= end[0] < 8 and 0 <= end[1] < 8):
             return False
 
@@ -67,11 +73,13 @@ class King(Piece):
 
         return False
 
-    def __str__(self):
-        return "K" if self.color == "black" else "k"
+    def serialize(self):
+        return "K"
+
 
 class Rook(Piece):
-    def valid_move(self, start, end, board):
+    @staticmethod
+    def valid_move(start, end, board):
         if not (0 <= end[0] < 8 and 0 <= end[1] < 8):
             return False
 
@@ -90,11 +98,13 @@ class Rook(Piece):
 
         return False
 
-    def __str__(self):
-        return "R" if self.color == "black" else "r"
+    def serialize(self):
+        return "R"
+
 
 class Knight(Piece):
-    def valid_move(self, start, end, board):
+    @staticmethod
+    def valid_move(start, end, board):
         if not (0 <= end[0] < 8 and 0 <= end[1] < 8):
             return False
 
@@ -105,11 +115,13 @@ class Knight(Piece):
 
         return False
 
-    def __str__(self):
-        return "N" if self.color == "black" else "n"
+    def serialize(self):
+        return "N"
+
 
 class Bishop(Piece):
-    def valid_move(self, start, end, board):
+    @staticmethod
+    def valid_move(start, end, board):
         if not (0 <= end[0] < 8 and 0 <= end[1] < 8):
             return False
 
@@ -120,11 +132,13 @@ class Bishop(Piece):
 
         return False
 
-    def __str__(self):
-        return "B" if self.color == "black" else "b"
+    def serialize(self):
+        return "B"
+
 
 class Queen(Piece):
-    def valid_move(self, start, end, board):
+    @staticmethod
+    def valid_move(start, end, board):
         if not (0 <= end[0] < 8 and 0 <= end[1] < 8):
             return False
 
@@ -135,11 +149,13 @@ class Queen(Piece):
 
         return False
 
-    def __str__(self):
-        return "Q" if self.color == "black" else "q"
+    def serialize(self):
+        return "Q"
+
 
 class Pawn(Piece):
-    def valid_move(self, start, end, board):
+    @staticmethod
+    def valid_move(start, end, board):
         if not (0 <= end[0] < 8 and 0 <= end[1] < 8):
             return False
 
@@ -150,8 +166,9 @@ class Pawn(Piece):
 
         return False
 
-    def __str__(self):
-        return "P" if self.color == "black" else "p"
+    def serialize(self):
+        return "P"
+
 
 # Define the chess board class
 class Board:
@@ -160,12 +177,10 @@ class Board:
         self.initialize_board()
 
     def initialize_board(self):
-        self.board[0] = [Rook("black"), Knight("black"), Bishop("black"), Queen("black"), King("black"),
-                         Bishop("black"), Knight("black"), Rook("black")]
-        self.board[1] = [Pawn("black") for _ in range(8)]
-        self.board[6] = [Pawn("white") for _ in range(8)]
-        self.board[7] = [Rook("white"), Knight("white"), Bishop("white"), Queen("white"), King("white"),
-                         Bishop("white"), Knight("white"), Rook("white")]
+        self.board[0] = [Rook(), Knight(), Bishop(), Queen(), King(), Bishop(), Knight(), Rook()]
+        self.board[1] = [Pawn() for _ in range(8)]
+        self.board[6] = [Pawn() for _ in range(8)]
+        self.board[7] = [Rook(), Knight(), Bishop(), Queen(), King(), Bishop(), Knight(), Rook()]
 
     def is_valid_move(self, start, end):
         if not (0 <= end[0] < 8 and 0 <= end[1] < 8):
@@ -185,14 +200,17 @@ class Board:
     def serialize_board(self):
         serialized_board = []
         for i, row in enumerate(self.board):
-            serialized_row = [str(7-i)] + [str(j) + str(piece) if piece is not None else ' ' + str(j) for j, piece in enumerate(row)]
+            serialized_row = [str(7 - i)] + [str(j) + str(piece.serialize()) if piece is not None else ' ' + str(j) for
+                                             j, piece in enumerate(row)]
             serialized_board.append(serialized_row)
         serialized_board.append([' ', '0', '1', '2', '3', '4', '5', '6', '7'])
         return serialized_board
 
+
 # Initialize the game
 game = Game(current_player="white")
 board = Board()
+
 
 # Define FastAPI routes
 @app.post("/start_game/")
@@ -201,6 +219,7 @@ def start_game():
     session.add(new_game)
     session.commit()
     return {"message": "Game started", "game_id": new_game.id}
+
 
 @app.post("/move/")
 def move(move: MoveRequest):
@@ -219,6 +238,7 @@ def move(move: MoveRequest):
 
     return {"message": "Move made", "game_id": game.id, "current_player": game.current_player}
 
+
 @app.post("/end_game/")
 def end_game(game_id: int):
     game = session.query(Game).filter_by(id=game_id).first()
@@ -227,6 +247,7 @@ def end_game(game_id: int):
     session.delete(game)
     session.commit()
     return {"message": "Game ended"}
+
 
 @app.get("/get_board/{game_id}")
 def get_board(game_id: int):
@@ -243,6 +264,7 @@ def get_board(game_id: int):
 
     return serialized_board
 
+
 @app.get("/initial_board/")
 def get_initial_board():
     initial_board = board.serialize_board()
@@ -251,9 +273,10 @@ def get_initial_board():
 
 @app.get("/")
 def message():
-    return("Welcome to chess game")
+    return ("Welcome to chess game")
+
+
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="127.0.0.1", port=8000)
-
